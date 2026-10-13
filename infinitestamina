@@ -1,0 +1,186 @@
+-- Forsaken | Infinite Stamina
+local Players = game:GetService("Players")
+local RS = game:GetService("ReplicatedStorage")
+local CoreGui = game:GetService("CoreGui")
+local UIS = game:GetService("UserInputService")
+
+local plr = Players.LocalPlayer
+local Sprinting, enabled, hooked, origInit
+
+task.spawn(function()
+    while not Sprinting do
+        local ok, m = pcall(require, RS:WaitForChild("Systems", 10)
+            :WaitForChild("Character", 10)
+            :WaitForChild("Game", 10)
+            :WaitForChild("Sprinting", 10))
+        if ok and type(m) == "table" then Sprinting = m
+        else task.wait(0.5) end
+    end
+end)
+
+local function on()
+    if not Sprinting then return end
+    if not hooked then
+        origInit = Sprinting.Init
+        local old = origInit
+        Sprinting.Init = function(...)
+            local r = old(...)
+            Sprinting.StaminaLossDisabled = true
+            return r
+        end
+        hooked = true
+    end
+    Sprinting.StaminaLossDisabled = true
+end
+
+local function off()
+    if not Sprinting then return end
+    if hooked and origInit then
+        Sprinting.Init = origInit
+        hooked = false
+        origInit = nil
+    end
+    Sprinting.StaminaLossDisabled = false
+end
+
+-- gui
+for _, g in ipairs(CoreGui:GetChildren()) do
+    if g.Name == "F_Stam" then g:Destroy() end
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "F_Stam"
+gui.ResetOnSpawn = false
+gui.IgnoreGuiInset = true
+pcall(function() gui.Parent = CoreGui end)
+if not gui.Parent then gui.Parent = plr:WaitForChild("PlayerGui") end
+
+-- pill (closed state)
+local pill = Instance.new("TextButton")
+pill.Size = UDim2.new(0, 44, 0, 44)
+pill.Position = UDim2.new(0, 20, 0, 100)
+pill.BackgroundColor3 = Color3.fromRGB(20, 20, 26)
+pill.Text = "F"
+pill.TextColor3 = Color3.fromRGB(200, 200, 220)
+pill.TextSize = 18
+pill.Font = Enum.Font.GothamBold
+pill.BorderSizePixel = 0
+pill.AutoButtonColor = false
+pill.Parent = gui
+Instance.new("UICorner", pill).CornerRadius = UDim.new(1, 0)
+local ps = Instance.new("UIStroke", pill)
+ps.Color = Color3.fromRGB(60, 60, 75)
+ps.Thickness = 1
+
+-- panel (open state)
+local panel = Instance.new("Frame")
+panel.Size = UDim2.new(0, 180, 0, 62)
+panel.Position = pill.Position
+panel.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
+panel.BackgroundTransparency = 0.08
+panel.BorderSizePixel = 0
+panel.Visible = false
+panel.Active = true
+panel.Parent = gui
+Instance.new("UICorner", panel).CornerRadius = UDim.new(0, 8)
+local pstr = Instance.new("UIStroke", panel)
+pstr.Color = Color3.fromRGB(60, 60, 75)
+pstr.Thickness = 1
+
+local title = Instance.new("TextLabel")
+title.Size = UDim2.new(1, -40, 0, 22)
+title.Position = UDim2.new(0, 10, 0, 4)
+title.BackgroundTransparency = 1
+title.Text = "Stamina+"
+title.TextColor3 = Color3.fromRGB(220, 220, 230)
+title.TextSize = 12
+title.Font = Enum.Font.GothamMedium
+title.TextXAlignment = Enum.TextXAlignment.Left
+title.Parent = panel
+
+local close = Instance.new("TextButton")
+close.Size = UDim2.new(0, 20, 0, 20)
+close.Position = UDim2.new(1, -24, 0, 3)
+close.BackgroundTransparency = 1
+close.Text = "✕"
+close.TextColor3 = Color3.fromRGB(180, 180, 190)
+close.TextSize = 14
+close.Font = Enum.Font.GothamBold
+close.Parent = panel
+
+local toggle = Instance.new("TextButton")
+toggle.Size = UDim2.new(1, -16, 0, 26)
+toggle.Position = UDim2.new(0, 8, 0, 28)
+toggle.BackgroundColor3 = Color3.fromRGB(32, 32, 40)
+toggle.BorderSizePixel = 0
+toggle.Text = "Infinite Stamina: OFF"
+toggle.TextColor3 = Color3.fromRGB(200, 200, 210)
+toggle.TextSize = 12
+toggle.Font = Enum.Font.Gotham
+toggle.Parent = panel
+Instance.new("UICorner", toggle).CornerRadius = UDim.new(0, 6)
+
+-- toggle behavior
+local function refresh()
+    toggle.Text = "Infinite Stamina: " .. (enabled and "ON" or "OFF")
+    toggle.TextColor3 = enabled
+        and Color3.fromRGB(140, 230, 160)
+        or Color3.fromRGB(200, 200, 210)
+end
+
+toggle.MouseButton1Click:Connect(function()
+    enabled = not enabled
+    refresh()
+    if enabled then
+        task.spawn(function()
+            while not Sprinting do task.wait(0.25) end
+            if enabled then on() end
+        end)
+    else
+        off()
+    end
+end)
+
+-- open/close
+pill.MouseButton1Click:Connect(function()
+    panel.Position = pill.Position
+    pill.Visible = false
+    panel.Visible = true
+end)
+
+close.MouseButton1Click:Connect(function()
+    pill.Position = panel.Position
+    panel.Visible = false
+    pill.Visible = true
+end)
+
+-- drag (works on both pill and panel)
+local function makeDrag(handle)
+    local dragging, dragStart, startPos
+    handle.InputBegan:Connect(function(i)
+        if i.UserInputType == Enum.UserInputType.MouseButton1
+        or i.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = i.Position
+            startPos = handle.Position
+            i.Changed:Connect(function()
+                if i.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UIS.InputChanged:Connect(function(i)
+        if not dragging then return end
+        if i.UserInputType == Enum.UserInputType.MouseMovement
+        or i.UserInputType == Enum.UserInputType.Touch then
+            local d = i.Position - dragStart
+            handle.Position = UDim2.new(
+                startPos.X.Scale, startPos.X.Offset + d.X,
+                startPos.Y.Scale, startPos.Y.Offset + d.Y)
+        end
+    end)
+end
+
+makeDrag(pill)
+makeDrag(panel)
